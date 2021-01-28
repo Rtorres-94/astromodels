@@ -1656,10 +1656,22 @@ def get_function(function_name, composite_function_expression=None):
 
                 instance = TemplateModel(function_name)
 
-            except MissingDataFile:
+            except KeyError:
 
-                raise UnknownFunction("Function %s is not known. Known functions are: %s" %
+                import astromodels.functions.spatial_model
+
+                try:
+
+                    instance = astromodels.functions.spatial_model.SpatialModel(function_name)
+
+                except astromodels.functions.spatial_model.MissingDataFile:
+
+                    raise UnknownFunction("Function %s is not known. Known functions are: %s" %
                                       (function_name, ",".join(list(_known_functions.keys()))))
+
+                else:
+
+                    return instance
 
             else:
 
@@ -1786,11 +1798,21 @@ def _parse_function_expression(function_specification):
 
             except astromodels.functions.template_model.MissingDataFile:
 
-                # It's not a template
+                # It's a spatial template
+                import astromodels.functions.spatial_model
 
-                raise UnknownFunction("Function %s in expression %s is unknown. If this is a template model, you are "
+                try:
+
+                    instance = astromodels.functions.spatial_model.SpatialModel(unique_function)
+
+                except astromodels.functions.spatial_model.MissingDataFile:
+
+                    raise UnknownFunction("Function %s in expression %s is unknown. If this is a template model, you are "
                                       "probably missing the data file" % (unique_function, function_specification))
 
+                else:
+                    
+                    instances[complete_function_specification] = instance
             else:
 
                 # It's a template
