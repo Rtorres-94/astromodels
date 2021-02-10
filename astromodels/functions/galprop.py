@@ -8,6 +8,9 @@ from scipy.interpolate import RegularGridInterpolator as GridInterpolate
 from astropy.coordinates import SkyCoord, ICRS, BaseCoordinateFrame
 from astromodels.functions.function import Function3D, FunctionMeta
 from astromodels.utils.angular_distance import angular_distance_fast
+from astromodels.utils.logging import setup_logger
+
+log = setup_logger(__name__)
 
 class GalPropTemplate_3D(with_metaclass(FunctionMeta, Function3D)):
     r"""
@@ -75,7 +78,9 @@ class GalPropTemplate_3D(with_metaclass(FunctionMeta, Function3D)):
         
         if fitsfile is None:
         
-            raise RuntimeError( "Need to specify a fits file with a template map." )
+            log.error( "Need to specify a fits file with a template map." )
+
+            raise RuntimeError()
 
         self._fitsfile = fitsfile
 
@@ -202,7 +207,9 @@ class GalPropTemplate_3D(with_metaclass(FunctionMeta, Function3D)):
 
             if lon.size != lat.size:
                 
-                raise AttributeError("Lon and Lat should be the same size")
+                log.error("Lon and Lat should be the same size")
+
+                raise AttributeError()
 
 
             f_new=np.zeros([energy.size, lat.size]) # Nicola: The image is a one dimensional array

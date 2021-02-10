@@ -152,7 +152,7 @@ class TemplateModelFactory(object):
     def define_parameter_grid(self, parameter_name, grid):
 
         assert parameter_name in self._parameters_grids, (
-            "Parameter %s is not part of this model" % parameter_name
+            f"Parameter {parameter_name} is not part of this model" #% parameter_name
         )
 
         grid_ = np.array(grid)
@@ -164,7 +164,7 @@ class TemplateModelFactory(object):
         # Assert that elements are unique
 
         assert np.all(np.unique(grid_) == grid_), (
-            "Non-unique elements in grid for parameter %s" % parameter_name
+            f"Non-unique elements in grid for parameter {parameter_name}" #% parameter_name
         )
 
         self._parameters_grids[parameter_name] = grid_
@@ -204,7 +204,7 @@ class TemplateModelFactory(object):
 
         for key in parameters_values_input:
 
-            assert key in self._parameters_grids, "Parameter %s is not known" % key
+            assert key in self._parameters_grids, (f"Parameter {key} is not known")# % key
 
             idx = list(self._parameters_grids.keys()).index(key)
 
@@ -214,7 +214,7 @@ class TemplateModelFactory(object):
 
         assert np.all(
             np.isfinite(parameters_values)
-        ), "You didn't specify all parameters' values."
+        ), ("You didn't specify all parameters' values.")
 
         # Make sure we are dealing with pure numpy arrays (list and astropy.Quantity instances will be transformed)
         # First we transform the input into a u.Quantity (if it's not already)
@@ -276,8 +276,8 @@ class TemplateModelFactory(object):
         except KeyError:
 
             log.error(
-                "The provided parameter values (%s) are not in the defined grid"
-                % parameters_values
+                f"The provided parameter values ({parameters_values}) are not in the defined grid"
+                #% parameters_values
             )
 
             raise ValuesNotInGrid()
@@ -310,7 +310,7 @@ class TemplateModelFactory(object):
         # Sanitize the data file
 
         filename_sanitized = os.path.abspath(
-            os.path.join(data_dir_path, "%s.h5" % self._name)
+            os.path.join(data_dir_path, f"{self._name}.h5") # % self._name)
         )
 
         # Check that it does not exists
@@ -325,8 +325,8 @@ class TemplateModelFactory(object):
                 except:
 
                     log.error(
-                        "The file %s already exists and cannot be removed (maybe you do not have "
-                        "permissions to do so?). " % filename_sanitized
+                        f"The file {filename_sanitized} already exists and cannot be removed (maybe you do not have "
+                        "permissions to do so?). " #% filename_sanitized
                     )
 
                     raise IOError()
@@ -334,8 +334,8 @@ class TemplateModelFactory(object):
             else:
 
                 log.error(
-                    "The file %s already exists! You cannot call two different "
-                    "template models with the same name" % filename_sanitized
+                    f"The file {filename_sanitized} already exists! You cannot call two different "
+                    "template models with the same name" #% filename_sanitized
                 )
 
                 raise IOError()
@@ -358,7 +358,7 @@ class TemplateModelFactory(object):
 
             for i, parameter_name in enumerate(self._parameters_grids.keys()):
 
-                store["p_%i_%s" % (i, parameter_name)] = pd.Series(
+                store[f"p_{i}_{parameter_name}"] = pd.Series(
                     self._parameters_grids[parameter_name]
                 )
 

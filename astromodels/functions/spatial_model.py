@@ -21,6 +21,9 @@ from astromodels.functions.function import Function3D, FunctionMeta
 from scipy.interpolate import RegularGridInterpolator as GridInterpolate
 from astromodels.utils.configuration import get_user_data_path
 from astromodels.utils.angular_distance import angular_distance_fast
+from astromodels.utils.logging import setup_logger
+
+log = setup_logger(__name__)
 
 __all__ = ["IncompleteGrid",
         "ValuesNotInGrid",
@@ -51,8 +54,11 @@ class ModelFactory(object):
         name = str(name)
 
         if re.match("[a-zA-Z_][a-zA-Z0-9_]*", name) is None:
-            raise RuntimeError(f"The provide name {name} is not a valid name."
-                                " You cannot use spaces, nor special characters.")
+
+            log.error(f"The provide name {name} is not a valid name."
+                    " You cannot use spaces, nor special characters.")
+
+            raise RuntimeError()
 
         self._name = name
         self._description = str(description)
@@ -102,7 +108,9 @@ class ModelFactory(object):
 
         if fitsfile is None:
             
-            raise RuntimeError("You need to specify a FITS file with a template map.")
+            log.error("You need to specify a FITS file with a template map.")
+
+            raise RuntimeError()
 
         self._fitsfile = fitsfile
 
@@ -187,7 +195,7 @@ class ModelFactory(object):
                 for j, l in enumerate(self._L):
                     for k, b in enumerate(self._B):
                         
-                        self._data_frame.loc[tuple(parameters_values)][(e, b, l)] = pd.to_numeric(self._map[i][j][k], downcast="float")
+                        self._data_frame.loc[tuple(parameters_values)][(e, b, l)] = pd.to_numeric(self._map[i][j][k])
 
         except:
 
@@ -203,7 +211,7 @@ class ModelFactory(object):
 
         for col in tqdm(types.index): #added a progress bar
 
-            data[col] = pd.to_numeric(data[col], downcast="float")
+            data[col] = pd.to_numeric(data[col])
 
         return data
 
@@ -232,17 +240,21 @@ class ModelFactory(object):
 
                 except:
 
-                    raise IOError(
-                                f"The file {filename_sanitized} already exists"
-                                " and cannot be removed (maybe you do not have "
-                                "permissions to do so?).")
+                    log.error(
+                            f"The file {filename_sanitized} already exists"
+                            " and cannot be removed (maybe you do not have "
+                            "permissions to do so?).")
+
+                    raise IOError()
 
             else:
 
-                raise IOError(
-                            f"The file {filename_sanitized} already exists!"
-                            " You cannot call two different "
-                            "spatial models with same name.")
+                log.error(
+                        f"The file {filename_sanitized} already exists!"
+                        " You cannot call two different "
+                        "spatial models with same name.")
+
+                raise IOError()
 
         #Open the HDF5 and write objects
         with HDFStore(filename_sanitized) as store:
@@ -259,7 +271,7 @@ class ModelFactory(object):
             #store the parameters
             for i, parameter_name in enumerate(self._parameters_grids.keys()):
 
-                store['p_%i_%s' % (i, parameter_name)] = pd.Series(self._parameters_grids[parameter_name])
+                store[f'p_{i}_{parameter_name}'] = pd.Series(self._parameters_grids[parameter_name])
 
             #store the map parameters
             store['energies'] = pd.Series(self._E)
