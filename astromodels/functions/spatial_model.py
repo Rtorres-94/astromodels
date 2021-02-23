@@ -195,7 +195,15 @@ class ModelFactory(object):
                 for j, l in enumerate(self._L):
                     for k, b in enumerate(self._B):
                         
-                        self._data_frame.loc[tuple(parameters_values)][(e, b, l)] = pd.to_numeric(self._map[i][j][k])
+                        tmp = pd.to_numeric(self._map[i][j][k])
+
+                        if len(parameters_values) == 1:
+                        
+                            self._data_frame.loc[parameters_values.tolist()] = tmp
+
+                        else:
+                        
+                            self._data_frame.loc[tuple(parameters_values)][(e, b, l)] = tmp
 
         except:
 
@@ -434,7 +442,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
         """
 
         #Figure out the shape of the data matrices 
-        para_shape = [x.shape[0] for x in list(self._parameters_grids.values())]
+        para_shape = np.array([x.shape[0] for x in list(self._parameters_grids.values())])
 
         #interpolate over the parameters
         self._interpolators = []
@@ -474,7 +482,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
         interpolated_map = np.array([self._interpolators[j](np.atleast_1d(parameter_values))
                                     for j in range(len(self._interpolators))])
 
-        map_shape = [x.shape[0] for x in list(self._map_grids.values())]
+        map_shape = np.array([x.shape[0] for x in list(self._map_grids.values())])
 
         #interpolate over map's energy, ra, and dec
         interpolator = GridInterpolate(self._map_grids.values(),
