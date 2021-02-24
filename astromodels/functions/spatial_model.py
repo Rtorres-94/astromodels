@@ -608,10 +608,10 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
                             b=[bmin, bmax, bmax, bmin],
                             frame='galactic')
 
-            self.ramin = min(_coord.transform.to('icrs').ra.value)
-            self.ramax = max(_coord.transform.to('icrs').ra.value)
-            self.decmin = min(_coord.transform.to('icrs').dec.value)
-            self.decmax = max(_coord.transform.to('icrs').dec.value)
+            self.ramin = min(_coord.transform_to('icrs').ra.value)
+            self.ramax = max(_coord.transform_to('icrs').ra.value)
+            self.decmin = min(_coord.transform_to('icrs').dec.value)
+            self.decmax = max(_coord.transform_to('icrs').dec.value)
 
         else:
 
