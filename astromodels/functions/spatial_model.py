@@ -469,7 +469,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
                     self._interpolators.append(this_interpolator)
 
-    def _interpolate(self, lats, lons, energies, parameter_values):
+    def _interpolate(self, parameter_values):
         """ 
         perform interpolation over energy, ra, and dec
         param: lats: latitude array of ROI
@@ -485,44 +485,9 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
         map_shape = np.array([x.shape[0] for x in list(self._map_grids.values())])
 
         #interpolate over map's energy, ra, and dec
-        interpolator = GridInterpolate(self._map_grids.values(),
+        self.interpolator = GridInterpolate(self._map_grids.values(),
                                         interpolated_map.reshape(*map_shape),
                                         method="linear", bounds_error=False, fill_value=0.0)
-
-        #create the array for the interpolated values
-        num = lats.size
-
-        f_interpolated = np.zeros([energies.size, lats.size]) #Nicola: The image is a one dimensional array
-        
-        #evaluate the interpolators over energy, ra, and dec
-        for i, e in enumerate(energies):
-
-            engs = np.repeat(e, num)
-
-            slice_points = tuple((engs, lats, lons))
-
-            if self._is_log10:
-
-                #if interpolation is carried using the log10 scale, ensure that values outside
-                #range of interpolation remain zero after conversion to linear scale.
-                #because if function returns zero, 10**(0) = 1. This affects the fit in 3ML and breaks things.
-
-                log_interpolated_slice = interpolator(slice_points)
-
-                interpolated_slice = np.array([0. if x==0. else np.power(10., x)
-                                                for x in log_interpolated_slice])
-
-            else:
-
-                interpolated_slice = interpolator(slice_points)
-            
-            f_interpolated[i] = interpolated_slice
-
-        assert np.all(np.isfinite(f_interpolated)), ("some values are wrong!")
-
-        values = f_interpolated
-
-        return values
 
     def _setup(self):
         
@@ -540,26 +505,63 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
         lons = x
         lats = y
+        energies = z
+
+        #evaluate the interpolated function over the morphology parameters
+        self._interpolate(args)
 
         angsep = angular_distance_fast(lon0, lat0, lons, lats)
 
-        #transform energy from keV to MeV
+        #transform energy from keV to GeV
         #galprop likes MeV, 3ML likes keV
         convert_val = np.log10((u.GeV.to('keV')/u.keV).value)
 
         #if only one energy is passed, make sure we can iterate just once
-        if not isinstance(z, np.ndarray):
+        if not isinstance(energies, np.ndarray):
 
-            z = np.array(z)
+            energies = np.array(energies)
 
-        log_energies = np.log10(z) - convert_val
+        log_energies = np.log10(energies) - convert_val
 
         if lons.size != lats.size:
 
             raise AttributeError("Lons and lats should have the same size!")
+        
+        #create the array for the interpolated values
+        num = lats.size
+
+        f_interpolated = np.zeros([energies.size, lats.size]) #Nicola: The image is a one dimensional array
+        
+        #evaluate the interpolators over energy, ra, and dec
+        for i, e in enumerate(log_energies):
+
+            engs = np.repeat(e, num)
+
+            slice_points = tuple((engs, lats, lons))
+
+            if self._is_log10:
+
+                #if interpolation is carried using the log10 scale, ensure that values outside
+                #range of interpolation remain zero after conversion to linear scale.
+                #because if function returns zero, 10**(0) = 1. This affects the fit in 3ML and breaks things.
+
+                log_interpolated_slice = self.interpolator(slice_points)
+
+                interpolated_slice = np.array([0. if x==0. else np.power(10., x)
+                                                for x in log_interpolated_slice])
+
+            else:
+
+                interpolated_slice = self.interpolator(slice_points)
+            
+            f_interpolated[i] = interpolated_slice
+
+        assert np.all(np.isfinite(f_interpolated)), ("some values are wrong!")
+
+        values = f_interpolated
 
         #A = np.multiply(K, self._interpolate(lons, lats, log_energies, args)/(10**convert_val))
-        A = np.multiply(K, self._interpolate(lats, lons, log_energies, args)) #if templates are normalized no need to convert back
+        A = np.multiply(K, values) #if templates are normalized no need to convert back
 
         return A.T
 
