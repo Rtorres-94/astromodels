@@ -471,20 +471,19 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
     def _interpolate(self, parameter_values):
         """ 
-        perform interpolation over energy, ra, and dec
-        param: lats: latitude array of ROI
-        param: lons: longitude array of ROI
-        param: energies: energy range to study over
+        interpolates over the morphology parameters and creates the interpolating 
+        function for energy, ra, and dec
         param: parameter_values: morphology parameters 
+        return: (none)
          """
 
-        #gather all interpolations for these parameters' values at all defined energies, ras, and decs
+        #gather all interpolations for these parameters' values
         interpolated_map = np.array([self._interpolators[j](np.atleast_1d(parameter_values))
                                     for j in range(len(self._interpolators))])
 
         map_shape = np.array([x.shape[0] for x in list(self._map_grids.values())])
 
-        #interpolate over map's energy, ra, and dec
+        #interpolating function over energy, RA, and Dec
         self.interpolator = GridInterpolate(self._map_grids.values(),
                                         interpolated_map.reshape(*map_shape),
                                         method="linear", bounds_error=False, fill_value=0.0)
