@@ -8,10 +8,8 @@ import astropy.units as u
 import pandas as pd
 import collections
 
-from tqdm import tqdm, trange
 from astropy.io import fits
 from pandas import HDFStore
-from pandas.api.types import infer_dtype
 from builtins import object, range, str
 from future.utils import with_metaclass
 
@@ -121,7 +119,7 @@ class ModelFactory(object):
             self._delEn = 0.2 #f[ihdu].header['CDELT3']
             self._refLon = f[ihdu].header['CRVAL1']
             self._refLat = f[ihdu].header['CRVAL2']
-            self._refEn = 2 #f[ihdu].header['CRVAL3'] #Log10 energy values -> GeV to MeV
+            self._refEn = 5 #f[ihdu].header['CRVAL3'] #Log(E/MeV) -> GeV to MeV
             self._refLonPix = f[ihdu].header['CRPIX1']
             self._refLatPix = f[ihdu].header['CRPIX2']
             #self._refEnPix = f[ihdu].header['CRPIX3']
@@ -211,18 +209,6 @@ class ModelFactory(object):
                                 f"The provided parameter values ({parameters_values}) "
                                 "are not in the defined grid.") 
     
-    #NOTE: this function is acting as major bottleneck for large dataframes
-    @staticmethod
-    def _clean_cols_for_hdf(data):
-
-        types = data.apply(lambda x: infer_dtype(x.values))
-
-        for col in tqdm(types.index): #added a progress bar
-
-            data[col] = pd.to_numeric(data[col])
-
-        return data
-
     def save_data(self, overwrite=False):
 
         #First make sure that the whole data matrix has been filled
@@ -267,10 +253,6 @@ class ModelFactory(object):
         #Open the HDF5 and write objects
         with HDFStore(filename_sanitized) as store:
 
-            #NOTE: _clean_cols_for_hdf is acting as a major bottle neck
-            #might be better not including this in the future
-            #requires more investigation
-            #self._clean_cols_for_hdf(self._data_frame).to_hdf(store, "data_frame")
             self._data_frame.apply(pd.to_numeric).to_hdf(store, "data_frame")
 
             store.get_storer('data_frame').attrs.metadata = {"description": self._description,
@@ -327,7 +309,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
                 max: 90.0
     """
         
-    def _custom_init_(self, model_name, other_name=None, log_interp=True):
+    def _custom_init_(self, model_name, other_name=None):
         """
         Custom initialization for this model
         :param model_name: the name of the model, corresponding to the root of the .h5 file in the data directory
@@ -427,12 +409,6 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
             super(SpatialModel, self).__init__(other_name, function_definition, parameters)                                                         
 
-        #finally prepare the interpolators
-        self._prepare_interpolators(log_interp)
-
-        #setup the frame
-        self._setup()
-
     def _prepare_interpolators(self, log_interp):
         """
         :function reads column of flux values and performs interpolation over
@@ -490,7 +466,16 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
     def _setup(self):
         
-        self._frame = "ICRS"
+        #TODO: _setup is currently not being called automatically within astromodels
+        #NOTE: for now, it requires to be called after instanciating the class
+ 
+        #finally prepare the interpolators
+        log.info("Setting the Spatial Model...")
+        log.info("Preparing the interpolators...")
+
+        self._prepare_interpolators(log_interp=True)
+
+        self._frame = ICRS()
 
     def _set_units(self, x_unit, y_unit, z_unit, w_unit):
 
@@ -513,7 +498,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
         #transform energy from keV to GeV
         #galprop likes MeV, 3ML likes keV
-        convert_val = np.log10((u.GeV.to('keV')/u.keV).value)
+        convert_val = np.log10((u.MeV.to('keV')/u.keV).value)
 
         #if only one energy is passed, make sure we can iterate just once
         if not isinstance(energies, np.ndarray):
@@ -540,7 +525,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
             if self._is_log10:
 
-                #if interpolation is carried using the log10 scale, ensure that values outside
+                #NOTE: if interpolation is carried using the log10 scale, ensure that values outside
                 #range of interpolation remain zero after conversion to linear scale.
                 #because if function returns zero, 10**(0) = 1. This affects the fit in 3ML and breaks things.
 
