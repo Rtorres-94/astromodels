@@ -309,7 +309,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
                 max: 90.0
     """
         
-    def _custom_init_(self, model_name, other_name=None):
+    def _custom_init_(self, model_name, other_name=None, log_interp=True):
         """
         Custom initialization for this model
         :param model_name: the name of the model, corresponding to the root of the .h5 file in the data directory
@@ -407,7 +407,12 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
         else:
 
-            super(SpatialModel, self).__init__(other_name, function_definition, parameters)                                                         
+            super(SpatialModel, self).__init__(other_name, function_definition, parameters)
+
+        #finally prepare the interpolators
+        self._prepare_interpolators(log_interp)
+
+        self._setup()
 
     def _prepare_interpolators(self, log_interp):
         """
@@ -416,6 +421,9 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
         :param: log_interp: the normalization of flux is done in log scale by default
         :return: (none)
         """
+
+        log.info("Setting the Spatial Model...")
+        log.info("Preparing the interpolators...")
 
         #Figure out the shape of the data matrices 
         para_shape = np.array([x.shape[0] for x in list(self._parameters_grids.values())])
@@ -445,7 +453,7 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
 
                     self._interpolators.append(this_interpolator)
 
-    def _interpolate(self, parameter_values):
+    def _interpolate(self, energies, lats, lons, parameter_values):
         """ 
         interpolates over the morphology parameters and creates the interpolating 
         function for energy, ra, and dec
@@ -460,22 +468,52 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
         map_shape = np.array([x.shape[0] for x in list(self._map_grids.values())])
 
         #interpolating function over energy, RA, and Dec
-        self.interpolator = GridInterpolate(self._map_grids.values(),
+        interpolator = GridInterpolate(self._map_grids.values(),
                                         interpolated_map.reshape(*map_shape),
                                         method="linear", bounds_error=False, fill_value=0.0)
+        
+        if lons.size != lats.size:
+
+            raise AttributeError("Lons and lats should have the same size!")
+
+        f_interpolated = np.zeros([energies.size, lats.size]) 
+        
+        #evaluate the interpolators over energy, ra, and dec
+        for i, e in enumerate(energies):
+
+            engs = np.repeat(e, lats.size)
+
+            slice_points = tuple((engs, lats, lons))
+
+            if self._is_log10:
+
+                #NOTE: if interpolation is carried using the log10 scale, ensure that values outside
+                #range of interpolation remain zero after conversion to linear scale.
+                #because if function returns zero, 10**(0) = 1. This affects the fit in 3ML and breaks things.
+
+                log_interpolated_slice = interpolator(slice_points)
+
+                interpolated_slice = np.array([0. if x==0. else np.power(10., x)
+                                                for x in log_interpolated_slice])
+
+            else:
+
+                interpolated_slice = interpolator(slice_points)
+            
+            f_interpolated[i] = interpolated_slice
+
+        assert np.all(np.isfinite(f_interpolated)), ("some values are wrong!")
+
+        values = f_interpolated
+
+        return values
 
     def _setup(self):
         
         #TODO: _setup is currently not being called automatically within astromodels
         #NOTE: for now, it requires to be called after instanciating the class
  
-        #finally prepare the interpolators
-        log.info("Setting the Spatial Model...")
-        log.info("Preparing the interpolators...")
-
-        self._prepare_interpolators(log_interp=True)
-
-        self._frame = ICRS()
+        self._frame = "ICRS"
 
     def _set_units(self, x_unit, y_unit, z_unit, w_unit):
 
@@ -491,61 +529,19 @@ class SpatialModel(with_metaclass(FunctionMeta, Function3D)):
         lats = y
         energies = z
 
-        #evaluate the interpolated function over the morphology parameters
-        self._interpolate(args)
-
         angsep = angular_distance_fast(lon0, lat0, lons, lats)
-
-        #transform energy from keV to GeV
-        #galprop likes MeV, 3ML likes keV
-        convert_val = np.log10((u.MeV.to('keV')/u.keV).value)
 
         #if only one energy is passed, make sure we can iterate just once
         if not isinstance(energies, np.ndarray):
 
             energies = np.array(energies)
 
-        log_energies = np.log10(energies) - convert_val
-
-        if lons.size != lats.size:
-
-            raise AttributeError("Lons and lats should have the same size!")
-        
-        #create the array for the interpolated values
-        num = lats.size
-
-        f_interpolated = np.zeros([energies.size, lats.size]) #Nicola: The image is a one dimensional array
-        
-        #evaluate the interpolators over energy, ra, and dec
-        for i, e in enumerate(log_energies):
-
-            engs = np.repeat(e, num)
-
-            slice_points = tuple((engs, lats, lons))
-
-            if self._is_log10:
-
-                #NOTE: if interpolation is carried using the log10 scale, ensure that values outside
-                #range of interpolation remain zero after conversion to linear scale.
-                #because if function returns zero, 10**(0) = 1. This affects the fit in 3ML and breaks things.
-
-                log_interpolated_slice = self.interpolator(slice_points)
-
-                interpolated_slice = np.array([0. if x==0. else np.power(10., x)
-                                                for x in log_interpolated_slice])
-
-            else:
-
-                interpolated_slice = self.interpolator(slice_points)
-            
-            f_interpolated[i] = interpolated_slice
-
-        assert np.all(np.isfinite(f_interpolated)), ("some values are wrong!")
-
-        values = f_interpolated
+        #transform energy from keV to MeV
+        #galprop likes MeV, 3ML likes keV
+        log_energies = np.log10(energies) - np.log10((u.MeV.to('keV')/u.keV).value)
 
         #A = np.multiply(K, self._interpolate(lons, lats, log_energies, args)/(10**convert_val))
-        A = np.multiply(K, values) #if templates are normalized no need to convert back
+        A = np.multiply(K, self._interpolate(log_energies, lats, lons, args)) #if templates are normalized no need to convert back
 
         return A.T
 
